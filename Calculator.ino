@@ -11,10 +11,14 @@
 
 #define GPIO_INPUT false
 #define GPIO_OUTPUT true
+#define MAX_BUFFER_SIZE 14
+#define MAX_INTEGER_DIGIT 15
+#define CURSOR_BLINK_INTERVAL_MILLI_SEC 1000
 
-uint _columns[4];
-uint _rows[4];
-char _matrix_values[16];
+//U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, /* clock=*/ 13, /* data=*/ 11, /* CS=*/ 10, /* reset=*/ 8); // for arduino uno
+
+U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, /* clock=*/18, /* data=*/19, /* CS=*/17, /* reset=*/8);  // for pi pico
+
 
 uint all_columns_mask = 0x0;
 uint column_mask[4];
@@ -25,12 +29,21 @@ char matrix[16] = {
   '1', '2', '3', 'A',
   '4', '5', '6', 'B',
   '7', '8', '9', 'C',
-  '*', '0', '#', 'D'
+  '.', '0', '#', 'D'
 };
 
-#define MAX_BUFFER_SIZE 14
-#define MAX_INTEGER_DIGIT 15
-#define CURSOR_BLINK_INTERVAL_MILLI_SEC 1000
+char str[8][25];
+int cur_x = 0;
+int cur_y = 0;
+char buffer[MAX_BUFFER_SIZE + 1];
+char temp_char = ' ';
+int cur = 0;
+unsigned long previous_time = 0;
+bool cursor_state = false;
+bool num_lock = false;
+bool op_lock = false;
+bool dir_lock = false;
+
 enum class Direction {
   NONE,
   UP,
@@ -38,27 +51,19 @@ enum class Direction {
   LEFT,
   RIGHT,
 };
-void pico_keypad_init(uint columns[4], uint rows[4], char matrix_values[16]) {
-
-  for (int i = 0; i < 16; i++) {
-    _matrix_values[i] = matrix_values[i];
-  }
-
+void pico_keypad_init() {
   for (int i = 0; i < 4; i++) {
 
-    _columns[i] = columns[i];
-    _rows[i] = rows[i];
+    gpio_init(columns[i]);
+    gpio_init(rows[i]);
 
-    gpio_init(_columns[i]);
-    gpio_init(_rows[i]);
+    gpio_set_dir(columns[i], GPIO_INPUT);
+    gpio_set_dir(rows[i], GPIO_OUTPUT);
 
-    gpio_set_dir(_columns[i], GPIO_INPUT);
-    gpio_set_dir(_rows[i], GPIO_OUTPUT);
+    digitalWrite(rows[i], HIGH);
 
-    gpio_put(_rows[i], 1);
-
-    all_columns_mask = all_columns_mask + (1 << _columns[i]);
-    column_mask[i] = 1 << _columns[i];
+    all_columns_mask = all_columns_mask + (1 << columns[i]);
+    column_mask[i] = 1 << columns[i];
   }
 }
 
@@ -71,27 +76,25 @@ void pico_keypad_init(uint columns[4], uint rows[4], char matrix_values[16]) {
 char pico_keypad_get_key(void) {
   int row;
   uint32_t cols;
-  bool pressed = false;
 
   cols = gpio_get_all();
   cols = cols & all_columns_mask;
 
   if (cols == 0x0) {
+    num_lock = false;
     return 0;
   }
 
   for (int j = 0; j < 4; j++) {
-    gpio_put(_rows[j], 0);
+    digitalWrite(rows[j], LOW);
   }
 
   for (row = 0; row < 4; row++) {
 
-    gpio_put(_rows[row], 1);
-
-    busy_wait_us(10000);
+    digitalWrite(rows[row], HIGH);
 
     cols = gpio_get_all();
-    gpio_put(_rows[row], 0);
+    digitalWrite(rows[row], LOW);
     cols = cols & all_columns_mask;
     if (cols != 0x0) {
       break;
@@ -99,18 +102,21 @@ char pico_keypad_get_key(void) {
   }
 
   for (int i = 0; i < 4; i++) {
-    gpio_put(_rows[i], 1);
+    digitalWrite(rows[i], HIGH);
   }
 
-  if (cols == column_mask[0]) {
-    return (char)_matrix_values[row * 4 + 0];
-  } else if (cols == column_mask[1]) {
-    return (char)_matrix_values[row * 4 + 1];
-  }
-  if (cols == column_mask[2]) {
-    return (char)_matrix_values[row * 4 + 2];
-  } else if (cols == column_mask[3]) {
-    return (char)_matrix_values[row * 4 + 3];
+  if (cols == column_mask[0] && num_lock == false) {
+    num_lock = true;
+    return matrix[row * 4 + 0];
+  } else if (cols == column_mask[1] && num_lock == false) {
+    num_lock = true;
+    return matrix[row * 4 + 1];
+  } else if (cols == column_mask[2] && num_lock == false) {
+    num_lock = true;
+    return matrix[row * 4 + 2];
+  } else if (cols == column_mask[3] && num_lock == false) {
+    num_lock = true;
+    return matrix[row * 4 + 3];
   } else {
     return 0;
   }
@@ -126,23 +132,10 @@ char pico_keypad_get_key(void) {
  */
 void pico_keypad_irq_enable(bool enable, gpio_irq_callback_t callback) {
   for (int i = 0; i < 4; i++) {
-    gpio_set_irq_enabled_with_callback(_columns[i], 0x8, enable, callback);
+    gpio_set_irq_enabled_with_callback(columns[i], 0x8, enable, callback);
   }
 }
 
-//U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, /* clock=*/ 13, /* data=*/ 11, /* CS=*/ 10, /* reset=*/ 8); // for arduino uno
-
-U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, /* clock=*/18, /* data=*/19, /* CS=*/17, /* reset=*/8);  // for pi pico
-
-char str[8][25];
-int cur_x = 0;
-int cur_y = 0;
-char buffer[MAX_BUFFER_SIZE + 1];
-char temp_char = ' ';
-int cur = 0;
-unsigned long previous_time = 0;
-boolean cursor_state = false;
-boolean button_lock = false;
 
 void print_error() {
   u8g2.clearDisplay();
@@ -214,83 +207,94 @@ Direction get_direction() {
   int pin = analogRead(A0);
   if (pin < 100) {
     Serial.println(0);
-    button_lock = false;
+    dir_lock = false;
     return Direction::NONE;
-  } else if (pin < 200 && button_lock == false) {
+  } else if (pin < 200 && dir_lock == false) {
     Serial.println("left");
-    button_lock = true;
+    dir_lock = true;
     return Direction::LEFT;
-  } else if (pin < 300 && button_lock == false) {
+  } else if (pin < 300 && dir_lock == false) {
     Serial.println("down");
     return Direction::DOWN;
-    button_lock = true;
-  } else if (pin < 800 && button_lock == false) {
+    dir_lock = true;
+  } else if (pin < 800 && dir_lock == false) {
     Serial.println("right");
-    button_lock = true;
+    dir_lock = true;
     return Direction::RIGHT;
-  } else if (button_lock == false) {
+  } else if (dir_lock == false) {
     Serial.println("up");
-    button_lock = true;
+    dir_lock = true;
     return Direction::UP;
   } else {
     return Direction::NONE;
   }
 }
 
-char get_key_3x4(int analog_input) {
-  if (analog_input > 1000 && button_lock == false) {
-    button_lock = true;
-    return '1';
-  } else if (analog_input < 980 && analog_input > 900 && button_lock == false) {
-    button_lock = true;
-    return '2';
-  } else if (analog_input < 760 && analog_input > 700 && button_lock == false) {
-    button_lock = true;
-    return '3';
-  } else if (analog_input < 600 && analog_input > 560 && button_lock == false) {
-    button_lock = true;
-    return '4';
-  } else if (analog_input < 500 && analog_input > 460 && button_lock == false) {
-    button_lock = true;
-    return '5';
-  } else if (analog_input < 440 && analog_input > 390 && button_lock == false) {
-    button_lock = true;
-    return '6';
-  } else if (analog_input < 380 && analog_input > 340 && button_lock == false) {
-    button_lock = true;
-    return '7';
-  } else if (analog_input < 340 && analog_input > 310 && button_lock == false) {
-    button_lock = true;
-    return '8';
-  } else if (analog_input < 310 && analog_input > 280 && button_lock == false) {
-    button_lock = true;
-    return '9';
-  } else if (analog_input < 280 && analog_input > 260 && button_lock == false) {
-    button_lock = true;
-    return '.';
-  } else if (analog_input < 260 && analog_input > 240 && button_lock == false) {
-    button_lock = true;
-    return '0';
-  } else if (analog_input < 240 && analog_input > 200 && button_lock == false) {
-    button_lock = true;
-    return 'E';
-  } else if (analog_input <= 200) {
-    button_lock = false;
-    return '\0';
+char get_op_key_3x4(int analog_input) {
+  if (analog_input > 1000 && op_lock == false) {
+    op_lock = true;
+    return 'a';
+  } else if (analog_input > 700 && op_lock == false) {
+    op_lock = true;
+    return 'b';
+  } else if (analog_input > 540 && op_lock == false) {
+    op_lock = true;
+    return 'C';
+  } else if (analog_input > 400 && op_lock == false) {
+    op_lock = true;
+    return 'd';
+  } else if (analog_input > 340 && op_lock == false) {
+    op_lock = true;
+    return 'e';
+  } else if (analog_input > 300 && op_lock == false) {
+    op_lock = true;
+    return 'f';
+  } else if (analog_input > 250 && op_lock == false) {
+    op_lock = true;
+    return 'g';
+  } else if (analog_input > 220 && op_lock == false) {
+    op_lock = true;
+    return 'h';
+  } else if (analog_input > 200 && op_lock == false) {
+    op_lock = true;
+    return 'i';
+  } else if (analog_input > 185 && op_lock == false) {
+    op_lock = true;
+    return 'j';
+  } else if (analog_input > 170 && op_lock == false) {
+    op_lock = true;
+    return 'k';
+  } else if (analog_input > 160 && op_lock == false) {
+    op_lock = true;
+    return 'l';
   } else {
+    op_lock = false;
     return '\0';
   }
 }
 void setup() {
   Serial.begin(9600);
   u8g2.begin();
-  pico_keypad_init(columns, rows, matrix);
+  pico_keypad_init();
 }
+
+void clear_buffer(){
+  for (int i = 0; i < MAX_BUFFER_SIZE; i++){
+    buffer[i] = '\0';    
+  }  
+  cur = 0;
+  temp_char = ' ';
+}
+
 void loop() {
   char key = pico_keypad_get_key();
-  Serial.print(analogRead(26));
+  char op = get_op_key_3x4(analogRead(26));
+  Serial.print(op);
   Serial.print(" - ");
-  Serial.println(pico_keypad_get_key());
+  Serial.println(key);
+  if (op == 'C'){
+    clear_buffer();
+  }
   if (key == '+' || key == '-' || key == '*' || key == '/') {
 
   } else if (key && cur < MAX_BUFFER_SIZE) {
