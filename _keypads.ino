@@ -7,11 +7,24 @@ uint column_mask[4];
 
 uint columns[4] = { 5, 4, 3, 2 };
 uint rows[4] = { 9, 8, 7, 6 };
-char matrix[16] = {
-  '1', '2', '3', 'A',
-  '4', '5', '6', 'B',
-  '7', '8', '9', 'C',
-  '.', '0', '#', 'D'
+char num_matrix[16] = {
+  '1', '2', '3', ' ',
+  '4', '5', '6', ' ',
+  '7', '8', '9', ' ',
+  '.', '0', 's', ' ' // ., 0, string
+};
+bool shift = false;
+char op_matrix1[12] = {
+  '+', 'r', 'C', // +, root, C/CE
+  '-', '^', 'S', // -, square, shift
+  '*', '(', 'd', // *, (, delete
+  '/', ')', 'L'  // /, ), log
+};
+char op_matrix2[12] = {
+  'B', '!', '?', // binary, factorial, wrong
+  'O', '%', '?', // octal, modulo, wrong
+  'D', 'R', '?', // decimal, random, wrong
+  'H', '#', '#'  // hexadecimal, temp, temp
 };
 
 bool num_lock = false;
@@ -73,16 +86,16 @@ char pico_keypad_get_key(void) {
 
   if (cols == column_mask[0] && num_lock == false) {
     num_lock = true;
-    return matrix[row * 4 + 0];
+    return num_matrix[row * 4 + 0];
   } else if (cols == column_mask[1] && num_lock == false) {
     num_lock = true;
-    return matrix[row * 4 + 1];
+    return num_matrix[row * 4 + 1];
   } else if (cols == column_mask[2] && num_lock == false) {
     num_lock = true;
-    return matrix[row * 4 + 2];
+    return num_matrix[row * 4 + 2];
   } else if (cols == column_mask[3] && num_lock == false) {
     num_lock = true;
-    return matrix[row * 4 + 3];
+    return num_matrix[row * 4 + 3];
   } else {
     return 0;
   }
@@ -105,40 +118,40 @@ void pico_keypad_irq_enable(bool enable, gpio_irq_callback_t callback) {
 char get_op_key_3x4(int analog_input) {
   if (analog_input > 1000 && op_lock == false) {
     op_lock = true;
-    return 'a';
+    return op_matrix1[0];
   } else if (analog_input > 700 && op_lock == false) {
     op_lock = true;
-    return 'b';
-  } else if (analog_input > 540 && op_lock == false) {
+    return op_matrix1[1];
+  } else if (analog_input > 520 && op_lock == false) {
     op_lock = true;
-    return 'C';
+    return op_matrix1[2];
   } else if (analog_input > 400 && op_lock == false) {
     op_lock = true;
-    return 'd';
+    return op_matrix1[3];
   } else if (analog_input > 340 && op_lock == false) {
     op_lock = true;
-    return 'e';
+    return op_matrix1[4];
   } else if (analog_input > 300 && op_lock == false) {
     op_lock = true;
-    return 'f';
+    return op_matrix1[5];
   } else if (analog_input > 250 && op_lock == false) {
     op_lock = true;
-    return 'g';
+    return op_matrix1[6];
   } else if (analog_input > 220 && op_lock == false) {
     op_lock = true;
-    return 'h';
+    return op_matrix1[7];
   } else if (analog_input > 200 && op_lock == false) {
     op_lock = true;
-    return 'i';
+    return op_matrix1[8];
   } else if (analog_input > 185 && op_lock == false) {
     op_lock = true;
-    return 'j';
+    return op_matrix1[9];
   } else if (analog_input > 170 && op_lock == false) {
     op_lock = true;
-    return 'k';
+    return op_matrix1[10];
   } else if (analog_input > 160 && op_lock == false) {
     op_lock = true;
-    return 'l';
+    return op_matrix1[11];
   } else if (analog_input < 100){
     op_lock = false;
     return '\0';

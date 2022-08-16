@@ -154,9 +154,11 @@ void loop() {
   }
   Serial.print(op);
   Serial.print(" - ");
-  Serial.println(key);
+  Serial.print(analogRead(26));
   Serial.print(" - ");
-  Serial.println(sizeof(long long));
+  Serial.print(key);
+  Serial.print(" - ");
+  Serial.println(sizeof(int64_t));
   if (op == 'C'){
     clear_buffer();
     op = '\0';
